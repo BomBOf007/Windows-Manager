@@ -17,7 +17,6 @@ namespace Windows_Manager
     /// </summary>
     public partial class MainWindow : Window
     {
-        // Importieren der benötigten Funktionen aus user32.dll
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
@@ -30,48 +29,80 @@ namespace Windows_Manager
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
-        // Delegate für die Fenster-Aufzählungsfunktion
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-        // Konstanten für die Positionierung
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
 
         public MainWindow()
         {
             InitializeComponent();
-
-            // Button zum Ändern der Fenstergröße hinzufügen
-            Button resizeButton = new Button
-            {
-                Text = "Alle Fenster anpassen",
-                Dock = DockStyle.Fill
-            };
-            resizeButton.Click += ResizeButton_Click;
-            this.Controls.Add(resizeButton);
+            LoadWindowList();
         }
 
-        private void ResizeButton_Click(object sender, EventArgs e)
+        // Klasse zur Darstellung von Fenstern in der ListBox
+        public class WindowInfo
         {
-            // Wunschgröße für alle Fenster
-            int targetWidth = 800;
-            int targetHeight = 600;
+            public IntPtr Handle { get; set; }
+            public string Title { get; set; }
+        }
+
+        // Fensterliste laden
+        private void LoadWindowList()
+        {
+            List<WindowInfo> windows = new List<WindowInfo>();
 
             EnumWindows((hWnd, lParam) =>
             {
-                if (IsWindowVisible(hWnd)) // Nur sichtbare Fenster
+                if (IsWindowVisible(hWnd))
                 {
                     StringBuilder windowText = new StringBuilder(256);
                     GetWindowText(hWnd, windowText, windowText.Capacity);
 
-                    if (windowText.Length > 0) // Fenster mit Titel
+                    if (windowText.Length > 0) // Nur Fenster mit Titel hinzufügen
                     {
-                        SetWindowPos(hWnd, IntPtr.Zero, 100, 100, targetWidth, targetHeight, SWP_NOZORDER | SWP_NOACTIVATE);
-                        Console.WriteLine($"Fenster angepasst: {windowText}");
+                        windows.Add(new WindowInfo { Handle = hWnd, Title = windowText.ToString() });
                     }
                 }
-                return true; // Fortsetzen der Aufzählung
+                return true;
             }, IntPtr.Zero);
+
+            WindowListBox.ItemsSource = windows; // Fenster in der ListBox anzeigen
+        }
+
+        // Anordnen der ausgewählten Fenster
+        private void TileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedWindows = WindowListBox.SelectedItems.Cast<WindowInfo>().ToList();
+
+            if (!selectedWindows.Any())
+            {
+                MessageBox.Show("Bitte wählen Sie mindestens ein Fenster zur Anordnung aus.");
+                return;
+            }
+
+            // Bildschirmgröße abrufen
+            int screenWidth = (int)SystemParameters.WorkArea.Width;
+            int screenHeight = (int)SystemParameters.WorkArea.Height;
+
+            // Fenster in ein Raster anordnen
+            int numWindows = selectedWindows.Count;
+            int cols = (int)Math.Ceiling(Math.Sqrt(numWindows));
+            int rows = (int)Math.Ceiling((double)numWindows / cols);
+
+            int windowWidth = screenWidth / cols;
+            int windowHeight = screenHeight / rows;
+
+            for (int i = 0; i < numWindows; i++)
+            {
+                int row = i / cols;
+                int col = i % cols;
+
+                int x = col * windowWidth;
+                int y = row * windowHeight;
+
+                SetWindowPos(selectedWindows[i].Handle, IntPtr.Zero, x, y, windowWidth, windowHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
         }
     }
 }
